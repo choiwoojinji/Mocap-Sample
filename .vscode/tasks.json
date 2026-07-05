@@ -1,0 +1,200 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "프로젝트 셋업 (venv 생성 + 패키지 설치 + 검증)",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "1. venv 생성 (.venv)",
+                "2. 패키지 설치 (pip install -e .)",
+                "3. 환경 검증 (import 확인)"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "1. venv 생성 (.venv)",
+            "type": "shell",
+            "osx": {
+                "command": "[ -d .venv ] && echo '.venv 이미 존재 - 건너뜀' || python3.12 -m venv .venv"
+            },
+            "linux": {
+                "command": "[ -d .venv ] && echo '.venv 이미 존재 - 건너뜀' || python3.12 -m venv .venv"
+            },
+            "windows": {
+                "command": "if (Test-Path .venv) { Write-Host '.venv 이미 존재 - 건너뜀' } else { py -3.12 -m venv .venv }"
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "2. 패키지 설치 (pip install -e .)",
+            "type": "shell",
+            "osx": {
+                "command": "${workspaceFolder}/.venv/bin/python",
+                "args": [
+                    "-m",
+                    "pip",
+                    "install",
+                    "-e",
+                    "."
+                ]
+            },
+            "linux": {
+                "command": "${workspaceFolder}/.venv/bin/python",
+                "args": [
+                    "-m",
+                    "pip",
+                    "install",
+                    "-e",
+                    "."
+                ]
+            },
+            "windows": {
+                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+                "args": [
+                    "-m",
+                    "pip",
+                    "install",
+                    "-e",
+                    "."
+                ]
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "3. 환경 검증 (import 확인)",
+            "type": "shell",
+            "osx": {
+                "command": "${workspaceFolder}/.venv/bin/python",
+                "args": [
+                    "-c",
+                    "import cv2, mediapipe, numpy; print(\"OK | cv2\", cv2.__version__, \"| mediapipe\", mediapipe.__version__, \"| numpy\", numpy.__version__)"
+                ]
+            },
+            "linux": {
+                "command": "${workspaceFolder}/.venv/bin/python",
+                "args": [
+                    "-c",
+                    "import cv2, mediapipe, numpy; print(\"OK | cv2\", cv2.__version__, \"| mediapipe\", mediapipe.__version__, \"| numpy\", numpy.__version__)"
+                ]
+            },
+            "windows": {
+                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+                "args": [
+                    "-c",
+                    "import cv2, mediapipe, numpy; print(\"OK | cv2\", cv2.__version__, \"| mediapipe\", mediapipe.__version__, \"| numpy\", numpy.__version__)"
+                ]
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "실행: 랜드마크 시각화 (capture)",
+            "type": "shell",
+            "osx": {
+                "command": "${workspaceFolder}/.venv/bin/python",
+                "args": [
+                    "-m",
+                    "src.capture.landmark_viewer"
+                ]
+            },
+            "linux": {
+                "command": "${workspaceFolder}/.venv/bin/python",
+                "args": [
+                    "-m",
+                    "src.capture.landmark_viewer"
+                ]
+            },
+            "windows": {
+                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+                "args": [
+                    "-m",
+                    "src.capture.landmark_viewer"
+                ]
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "실행: 데이터 수집 (dataset)",
+            "type": "shell",
+            "osx": {
+                "command": "${workspaceFolder}/.venv/bin/python",
+                "args": [
+                    "-m",
+                    "src.dataset.collect",
+                    "--label",
+                    "${input:signLabel}"
+                ]
+            },
+            "linux": {
+                "command": "${workspaceFolder}/.venv/bin/python",
+                "args": [
+                    "-m",
+                    "src.dataset.collect",
+                    "--label",
+                    "${input:signLabel}"
+                ]
+            },
+            "windows": {
+                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+                "args": [
+                    "-m",
+                    "src.dataset.collect",
+                    "--label",
+                    "${input:signLabel}"
+                ]
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        {
+            "id": "signLabel",
+            "type": "pickString",
+            "description": "수집할 수화 단어",
+            "options": [
+                "예",
+                "아니요",
+                "안녕하세요"
+            ],
+            "default": "안녕하세요"
+        }
+    ]
+}

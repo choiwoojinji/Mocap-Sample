@@ -1,0 +1,17 @@
+[project]
+name = "mocap-sample"
+version = "0.1.0"
+description = "수화 인식 기반 로봇 제어 (OpenCV + MediaPipe + Gazebo)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "opencv-contrib-python==5.0.0.93",
+    "mediapipe==0.10.35",
+    "numpy==2.5.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = []
