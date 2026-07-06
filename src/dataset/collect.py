@@ -104,14 +104,19 @@ def process_frame(cap, landmarker, t0: float):
     return frame, result
 
 
-def show(frame, result, text: str, color, bar: ButtonBar, buttons) -> str | None:
+def show(frame, result, text: str, color, bar: ButtonBar, buttons,
+         progress: float | None = None) -> str | None:
     """랜드마크·상태 텍스트·버튼을 그려 표시하고, 발생한 동작을 반환한다.
 
+    progress가 주어지면(0~1) 화면 하단에 빨간 진행 바를 그린다 (녹화 진행 표시용).
     반환: 'toggle' (START/PAUSE 버튼 또는 SPACE), 'quit' (QUIT 버튼 또는 q/ESC), None
     """
     for hand in result.hand_landmarks:
         draw_landmarks(frame, hand)
     cv2.putText(frame, text, (10, 45), cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 3)
+    if progress is not None:
+        h, w = frame.shape[:2]
+        cv2.rectangle(frame, (0, h - 14), (int(w * progress), h), (0, 0, 255), -1)
     bar.draw(frame, buttons)
     cv2.imshow(WINDOW, frame)
     key = cv2.waitKey(1) & 0xFF
@@ -124,8 +129,12 @@ def show(frame, result, text: str, color, bar: ButtonBar, buttons) -> str | None
 
 
 def record_sequence(cap, landmarker, num_frames: int, t0: float,
-                    bar: ButtonBar | None = None) -> tuple[np.ndarray, str | None]:
-    """num_frames 프레임 동안 시퀀스를 녹화한다. 반환: (시퀀스 (num_frames, 126), 동작)."""
+                    bar: ButtonBar | None = None,
+                    status: str = "") -> tuple[np.ndarray, str | None]:
+    """num_frames 프레임 동안 시퀀스를 녹화한다. 반환: (시퀀스 (num_frames, 126), 동작).
+
+    녹화 진행은 프레임 숫자 대신 하단 진행 바로 표시한다 (저장 개수와 혼동 방지).
+    """
     buffer = []
     action = None
     while len(buffer) < num_frames:
@@ -134,8 +143,9 @@ def record_sequence(cap, landmarker, num_frames: int, t0: float,
             continue
         buffer.append(landmarks_to_vector(result))
         if bar is not None:
-            a = show(frame, result, f"REC {len(buffer)}/{num_frames}", (0, 0, 255),
-                     bar, [("quit", "QUIT", (0, 0, 180))])
+            a = show(frame, result, f"{status}  REC", (0, 0, 255),
+                     bar, [("quit", "QUIT", (0, 0, 180))],
+                     progress=len(buffer) / num_frames)
             action = a or action
     return np.stack(buffer), action
 
@@ -209,7 +219,7 @@ def main() -> None:
             print("일시정지 — START(또는 SPACE)로 재개")
             continue
 
-        seq, action = record_sequence(cap, landmarker, args.frames, t0, bar)
+        seq, action = record_sequence(cap, landmarker, args.frames, t0, bar, status)
         detected_ratio = float((seq != 0).any(axis=1).mean())
         if detected_ratio < MIN_DETECTED_RATIO:
             skipped += 1
