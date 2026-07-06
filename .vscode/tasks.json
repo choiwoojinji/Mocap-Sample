@@ -182,19 +182,79 @@
                 "panel": "shared"
             },
             "problemMatcher": []
+        },
+        {
+            "label": "실행: 모델 학습 (training)",
+            "type": "shell",
+            "osx": {
+                "command": "${workspaceFolder}/.venv/bin/python",
+                "args": [
+                    "-m",
+                    "src.training.train"
+                ]
+            },
+            "linux": {
+                "command": "${workspaceFolder}/.venv/bin/python",
+                "args": [
+                    "-m",
+                    "src.training.train"
+                ]
+            },
+            "windows": {
+                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+                "args": [
+                    "-m",
+                    "src.training.train"
+                ]
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "실행: 실시간 추론 (inference)",
+            "type": "shell",
+            "osx": {
+                "command": "${workspaceFolder}/.venv/bin/python",
+                "args": [
+                    "-m",
+                    "src.inference.predict"
+                ]
+            },
+            "linux": {
+                "command": "${workspaceFolder}/.venv/bin/python",
+                "args": [
+                    "-m",
+                    "src.inference.predict"
+                ]
+            },
+            "windows": {
+                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+                "args": [
+                    "-m",
+                    "src.inference.predict"
+                ]
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
         }
     ],
     "inputs": [
         {
             "id": "signLabel",
-            "type": "pickString",
-            "description": "수집할 수화 단어",
-            "options": [
-                "예",
-                "아니요",
-                "안녕하세요"
-            ],
-            "default": "안녕하세요"
+            "type": "promptString",
+            "description": "수집할 수신호 라벨 (자유 입력, 예: 멈춰)"
         }
     ]
 }
