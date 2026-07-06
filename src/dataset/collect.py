@@ -28,13 +28,14 @@ import cv2
 import numpy as np
 
 from src.capture.extractor import FEATURE_DIM, HAND_DIM, FeatureExtractor, draw_pose
-from src.capture.landmark_viewer import draw_landmarks, open_camera
+from src.capture.landmark_viewer import HandWarning, draw_landmarks, open_camera
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "asset"
 MIN_DETECTED_RATIO = 0.5  # 손 감지 프레임이 이 비율 미만이면 SKIP
 
 WINDOW = "Collect"
 BTN_W, BTN_H, BTN_MARGIN = 150, 50, 10
+
 
 
 class ButtonBar:
@@ -93,13 +94,18 @@ def draw_detections(frame, hand_result, pose_result) -> None:
 
 
 def show(frame, hand_result, pose_result, text: str, color, bar: ButtonBar, buttons,
-         progress: float | None = None) -> str | None:
+         progress: float | None = None,
+         warning: HandWarning | None = None) -> str | None:
     """랜드마크·상태 텍스트·버튼을 그려 표시하고, 발생한 동작을 반환한다.
 
     progress가 주어지면(0~1) 화면 하단에 빨간 진행 바를 그린다 (녹화 진행 표시용).
+    warning이 주어지면 손 미감지 상태를 갱신하고 이탈 경고를 그린다.
     반환: 'toggle' (START/PAUSE 버튼 또는 SPACE), 'quit' (QUIT 버튼 또는 q/ESC), None
     """
     draw_detections(frame, hand_result, pose_result)
+    if warning is not None:
+        warning.update(hand_result)
+        warning.draw(frame)
     cv2.putText(frame, text, (10, 45), cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 3)
     if progress is not None:
         h, w = frame.shape[:2]
@@ -122,7 +128,8 @@ def hand_detected_ratio(seq: np.ndarray) -> float:
 
 def record_sequence(cap, extractor, num_frames: int, t0: float,
                     bar: ButtonBar | None = None,
-                    status: str = "") -> tuple[np.ndarray, str | None]:
+                    status: str = "",
+                    warning: HandWarning | None = None) -> tuple[np.ndarray, str | None]:
     """num_frames 프레임 동안 시퀀스를 녹화한다. 반환: (시퀀스 (num_frames, 150), 동작).
 
     녹화 진행은 프레임 숫자 대신 하단 진행 바로 표시한다 (저장 개수와 혼동 방지).
@@ -137,13 +144,13 @@ def record_sequence(cap, extractor, num_frames: int, t0: float,
         if bar is not None:
             a = show(frame, hand_result, pose_result, f"{status}  REC", (0, 0, 255),
                      bar, [("quit", "QUIT", (0, 0, 180))],
-                     progress=len(buffer) / num_frames)
+                     progress=len(buffer) / num_frames, warning=warning)
             action = a or action
     return np.stack(buffer), action
 
 
 def countdown(cap, extractor, t0: float, seconds: float, status: str,
-              bar: ButtonBar) -> str | None:
+              bar: ButtonBar, warning: HandWarning | None = None) -> str | None:
     """다음 녹화 전 준비 카운트다운. 발생한 동작을 반환한다."""
     action = None
     end = time.monotonic() + seconds
@@ -154,7 +161,8 @@ def countdown(cap, extractor, t0: float, seconds: float, status: str,
         remain = end - time.monotonic()
         a = show(frame, hand_result, pose_result, f"{status}  READY {remain:.1f}s",
                  (0, 200, 255), bar,
-                 [("quit", "QUIT", (0, 0, 180)), ("toggle", "PAUSE", (0, 140, 200))])
+                 [("quit", "QUIT", (0, 0, 180)), ("toggle", "PAUSE", (0, 140, 200))],
+                 warning=warning)
         action = a or action
         if action == "quit":
             break
@@ -182,6 +190,7 @@ def main() -> None:
     cv2.namedWindow(WINDOW)
     bar = ButtonBar()
     bar.attach(WINDOW)
+    warning = HandWarning(enabled=not args.idle)  # idle 수집은 손이 없는 게 정상
 
     t0 = time.monotonic()
     saved = 0
@@ -199,7 +208,8 @@ def main() -> None:
                 break
             action = show(frame, hand_result, pose_result,
                           status + "  SPACE=start  q=quit", (0, 255, 0), bar,
-                          [("quit", "QUIT", (0, 0, 180)), ("toggle", "START", (0, 160, 0))])
+                          [("quit", "QUIT", (0, 0, 180)), ("toggle", "START", (0, 160, 0))],
+                          warning=warning)
             if action == "quit":
                 break
             if action == "toggle":
@@ -207,7 +217,7 @@ def main() -> None:
             continue
 
         # 자동 수집: 카운트다운 → 녹화 → 저장, 반복
-        action = countdown(cap, extractor, t0, args.prep, status, bar)
+        action = countdown(cap, extractor, t0, args.prep, status, bar, warning)
         if action == "quit":
             break
         if action == "toggle":
@@ -215,7 +225,7 @@ def main() -> None:
             print("일시정지 — START(또는 SPACE)로 재개")
             continue
 
-        seq, action = record_sequence(cap, extractor, args.frames, t0, bar, status)
+        seq, action = record_sequence(cap, extractor, args.frames, t0, bar, status, warning)
         ratio = hand_detected_ratio(seq)
         if not args.idle and ratio < MIN_DETECTED_RATIO:
             skipped += 1

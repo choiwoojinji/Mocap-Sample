@@ -25,6 +25,35 @@ MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "hand_landmarker.t
 
 HAND_CONNECTIONS = vision.HandLandmarksConnections.HAND_CONNECTIONS
 
+# 손 이탈 경고: 연속 미감지가 이 프레임 수를 넘으면 화면을 빨갛게 깜빡인다
+WARN_AFTER_MISSES = 5
+
+
+class HandWarning:
+    """손이 화면에서 사라지면 빨간 깜빡임 경고를 그린다. (시각화·수집·추론 공용)"""
+
+    def __init__(self, enabled: bool = True) -> None:
+        self.enabled = enabled
+        self.misses = 0
+
+    def update(self, hand_result) -> None:
+        self.misses = 0 if hand_result.hand_landmarks else self.misses + 1
+
+    def draw(self, frame) -> None:
+        if not self.enabled or self.misses < WARN_AFTER_MISSES:
+            return
+        h, w = frame.shape[:2]
+        blink_on = int(time.monotonic() * 4) % 2 == 0  # 2Hz 깜빡임
+        if blink_on:
+            overlay = frame.copy()
+            cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 255), -1)
+            cv2.addWeighted(overlay, 0.30, frame, 0.70, 0, frame)
+        cv2.rectangle(frame, (0, 0), (w - 1, h - 1), (0, 0, 255), 16)
+        cv2.putText(frame, "!! HAND OUT OF FRAME !!", (w // 2 - 260, h // 2),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.4, (255, 255, 255), 4)
+        cv2.putText(frame, "!! HAND OUT OF FRAME !!", (w // 2 - 260, h // 2),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.4, (0, 0, 255), 2)
+
 
 def ensure_model() -> Path:
     """모델 파일이 없으면 다운로드한다."""
@@ -81,6 +110,7 @@ def main() -> None:
     cap = open_camera()
     start = time.monotonic()
     prev_time = start
+    warning = HandWarning()
 
     while True:
         ok, frame = cap.read()
@@ -99,6 +129,8 @@ def main() -> None:
 
         for hand in result.hand_landmarks:
             draw_landmarks(frame, hand)
+        warning.update(result)
+        warning.draw(frame)
 
         # FPS 표시
         now = time.monotonic()

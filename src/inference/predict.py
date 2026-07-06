@@ -20,8 +20,8 @@ import cv2
 import numpy as np
 import torch
 
-from src.capture.extractor import FeatureExtractor
-from src.capture.landmark_viewer import open_camera
+from src.capture.extractor import HAND_DIM, FeatureExtractor
+from src.capture.landmark_viewer import HandWarning, open_camera
 from src.dataset.collect import draw_detections, process_frame
 from src.training.train import SignLSTM
 
@@ -140,6 +140,7 @@ def main() -> None:
     streak = 0
     confirmed = "인식 불가"
     confirmed_idx: int | None = None
+    warning = HandWarning()
 
     while True:
         frame, hand_result, pose_result = process_frame(cap, extractor, t0)
@@ -147,12 +148,36 @@ def main() -> None:
             print("프레임을 읽지 못했습니다. 종료합니다.")
             break
         draw_detections(frame, hand_result, pose_result)
+        warning.update(hand_result)
+        warning.draw(frame)
         window.append(FeatureExtractor.vector(hand_result, pose_result))
 
         probs, top = None, None
         status = "버퍼 채우는 중..."
         if len(window) == num_frames:
-            x = torch.from_numpy(np.stack(window)[None]).to(device)
+            arr = np.stack(window)
+
+            # 안전 가드: 윈도우 대부분에서 사람(포즈)이 안 잡히면 모델 판단을 신뢰하지 않는다
+            pose_ratio = float((arr[:, HAND_DIM * 2 :] != 0).any(axis=1).mean())
+            if pose_ratio < 0.3:
+                streak_label, streak = None, 0
+                if confirmed != "인식 불가":
+                    confirmed = "인식 불가"
+                    confirmed_idx = None
+                    print("확정: 인식 불가 (사람 미감지) → 안전 기본값(정지)")
+                panel_texts = draw_probability_panel(frame, labels, None, None,
+                                                     None, args.threshold)
+                frame = draw_text(frame, [
+                    ("확정: 인식 불가", (10, 10), (80, 80, 255), 40),
+                    ("사람 미감지", (10, 62), (80, 80, 255), 24),
+                    *panel_texts,
+                ])
+                cv2.imshow("Sign Inference", frame)
+                if (cv2.waitKey(1) & 0xFF) in (ord("q"), 27):
+                    break
+                continue
+
+            x = torch.from_numpy(arr[None]).to(device)
             with torch.no_grad():
                 probs = torch.softmax(model(x), dim=1)[0].cpu().numpy()
             top = int(probs.argmax())
