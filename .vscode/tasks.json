@@ -248,6 +248,24 @@
                 "panel": "shared"
             },
             "problemMatcher": []
+        },
+        {
+            "label": "시뮬 데모: Gazebo + 인식기 (Mac)",
+            "type": "shell",
+            "osx": {
+                "command": "python3",
+                "args": [
+                    "${workspaceFolder}/../Mocap-Sim/tools/run_demo_mac.py"
+                ]
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
         }
     ],
     "inputs": [

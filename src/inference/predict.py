@@ -23,6 +23,7 @@ import torch
 from src.capture.extractor import HAND_DIM, FeatureExtractor
 from src.capture.landmark_viewer import HandWarning, open_camera
 from src.dataset.collect import draw_detections, process_frame
+from src.inference.publisher import make_publisher
 from src.training.train import SignLSTM
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -123,6 +124,12 @@ def main() -> None:
                         help="확정에 필요한 최소 신뢰도")
     parser.add_argument("--consecutive", type=int, default=5,
                         help="확정에 필요한 연속 동일 예측 횟수")
+    parser.add_argument("--publish", choices=["none", "udp", "rosbridge"], default="none",
+                        help="확정 신호 외부 전달 방식 (기계 프로젝트 연동)")
+    parser.add_argument("--udp-host", default="127.0.0.1")
+    parser.add_argument("--udp-port", type=int, default=5555)
+    parser.add_argument("--rosbridge-url", default="ws://localhost:9090")
+    parser.add_argument("--ros-topic", default="/hand_signal")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -130,10 +137,13 @@ def main() -> None:
     print(f"모델 로드: {args.model.name}  라벨: {labels}")
     print(f"안정화: 신뢰도 ≥ {args.threshold}, 연속 {args.consecutive}회 일치 시 확정")
 
+    publisher = make_publisher(args.publish, udp_host=args.udp_host, udp_port=args.udp_port,
+                               rosbridge_url=args.rosbridge_url, ros_topic=args.ros_topic)
     draw_text = make_text_drawer()
     extractor = FeatureExtractor()
     cap = open_camera()
     t0 = time.monotonic()
+    last_sent: tuple[str, float] = ("", 0.0)  # (마지막 전송 신호, 전송 시각)
 
     window: deque[np.ndarray] = deque(maxlen=num_frames)
     streak_label: int | None = None
@@ -165,6 +175,10 @@ def main() -> None:
                     confirmed = "인식 불가"
                     confirmed_idx = None
                     print("확정: 인식 불가 (사람 미감지) → 안전 기본값(정지)")
+                now = time.monotonic()
+                if last_sent[0] != "unknown" or now - last_sent[1] >= 1.0:
+                    publisher.publish("unknown", 0.0)
+                    last_sent = ("unknown", now)
                 panel_texts = draw_probability_panel(frame, labels, None, None,
                                                      None, args.threshold)
                 frame = draw_text(frame, [
@@ -199,6 +213,14 @@ def main() -> None:
                     confirmed_idx = None
                     print("확정: 인식 불가 → 안전 기본값(정지)")
 
+        # 확정 상태 전송: 상태가 바뀌면 즉시, 같으면 1초 주기 하트비트
+        signal = labels[confirmed_idx] if confirmed_idx is not None else "unknown"
+        now = time.monotonic()
+        if signal != last_sent[0] or now - last_sent[1] >= 1.0:
+            conf_out = float(probs[confirmed_idx]) if (probs is not None and confirmed_idx is not None) else 0.0
+            publisher.publish(signal, conf_out)
+            last_sent = (signal, now)
+
         panel_texts = draw_probability_panel(frame, labels, probs, top,
                                              confirmed_idx, args.threshold)
         header_color = (0, 220, 0) if confirmed_idx is not None else (80, 80, 255)
@@ -215,6 +237,7 @@ def main() -> None:
     cap.release()
     cv2.destroyAllWindows()
     extractor.close()
+    publisher.close()
 
 
 if __name__ == "__main__":
