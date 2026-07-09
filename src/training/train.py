@@ -20,6 +20,8 @@ from torch import nn
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
 
+from src.training.augment import augment_batch
+
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATA_DIR = ROOT / "asset"
 DEFAULT_MODEL_PATH = ROOT / "models" / "sign_classifier.pt"
@@ -94,6 +96,8 @@ def main() -> None:
     parser.add_argument("--layers", type=int, default=2)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--patience", type=int, default=30, help="early stopping 대기 epoch")
+    parser.add_argument("--no-augment", action="store_true",
+                        help="악조건 증강(도메인 랜덤화) 끄기 — 기본은 켜짐")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -106,17 +110,22 @@ def main() -> None:
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     criterion = nn.CrossEntropyLoss()
 
-    train_x = torch.from_numpy(X_train).to(device)
     train_y = torch.from_numpy(y_train).long().to(device)
+    use_augment = not args.no_augment
+    rng = np.random.default_rng(42)
+    print(f"악조건 증강(도메인 랜덤화): {'켜짐 — 노이즈/손 소실/시간 신축/이동·스케일/렌즈 왜곡' if use_augment else '꺼짐'}")
 
     best_val, best_state, wait = 0.0, None, 0
     for epoch in range(1, args.epochs + 1):
         model.train()
-        perm = torch.randperm(len(train_x))
-        for i in range(0, len(train_x), args.batch):
+        perm = np.random.permutation(len(X_train))
+        for i in range(0, len(X_train), args.batch):
             idx = perm[i : i + args.batch]
+            xb = X_train[idx]
+            if use_augment:
+                xb = augment_batch(xb, rng)  # 원본은 보존, 배치 사본에만 변형
             optimizer.zero_grad()
-            loss = criterion(model(train_x[idx]), train_y[idx])
+            loss = criterion(model(torch.from_numpy(xb).to(device)), train_y[idx])
             loss.backward()
             optimizer.step()
 
