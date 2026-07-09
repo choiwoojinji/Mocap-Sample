@@ -124,6 +124,10 @@ def main() -> None:
                         help="확정에 필요한 최소 신뢰도")
     parser.add_argument("--consecutive", type=int, default=5,
                         help="확정에 필요한 연속 동일 예측 횟수")
+    parser.add_argument("--ema", type=float, default=0.4,
+                        help="확률 지수 평활 계수 (1.0 = 평활 끔) — 스파이크 노이즈 방어")
+    parser.add_argument("--release-grace", type=float, default=1.0,
+                        help="확정 해제 유예 시간(초) — 일시적 신뢰도 하락에 기계가 서지 않게")
     parser.add_argument("--publish", choices=["none", "udp", "rosbridge"], default="none",
                         help="확정 신호 외부 전달 방식 (기계 프로젝트 연동)")
     parser.add_argument("--udp-host", default="127.0.0.1")
@@ -151,6 +155,8 @@ def main() -> None:
     confirmed = "인식 불가"
     confirmed_idx: int | None = None
     warning = HandWarning()
+    smoothed: np.ndarray | None = None   # 확률 EMA 상태
+    low_conf_since: float | None = None  # 해제 유예 타이머 시작 시각
 
     while True:
         frame, hand_result, pose_result = process_frame(cap, extractor, t0)
@@ -171,6 +177,7 @@ def main() -> None:
             pose_ratio = float((arr[:, HAND_DIM * 2 :] != 0).any(axis=1).mean())
             if pose_ratio < 0.3:
                 streak_label, streak = None, 0
+                smoothed, low_conf_since = None, None  # 사람이 사라지면 평활·유예 상태도 초기화
                 if confirmed != "인식 불가":
                     confirmed = "인식 불가"
                     confirmed_idx = None
@@ -193,13 +200,18 @@ def main() -> None:
 
             x = torch.from_numpy(arr[None]).to(device)
             with torch.no_grad():
-                probs = torch.softmax(model(x), dim=1)[0].cpu().numpy()
+                raw_probs = torch.softmax(model(x), dim=1)[0].cpu().numpy()
+            # 확률 EMA 평활: 1프레임 스파이크가 판단에 직접 튀지 않게
+            smoothed = raw_probs if smoothed is None else \
+                args.ema * raw_probs + (1 - args.ema) * smoothed
+            probs = smoothed
             top = int(probs.argmax())
             conf = float(probs[top])
             status = f"연속 일치 {min(streak, args.consecutive)}/{args.consecutive}"
 
-            # 안정화 필터: 임계값 + 연속 일치
+            # 안정화 필터: 임계값 + 연속 일치 (확정은 깐깐하게)
             if conf >= args.threshold:
+                low_conf_since = None
                 streak = streak + 1 if top == streak_label else 1
                 streak_label = top
                 if streak >= args.consecutive and confirmed != labels[top]:
@@ -207,11 +219,21 @@ def main() -> None:
                     confirmed_idx = top
                     print(f"확정: {confirmed}  (신뢰도 {conf:.2f})")
             else:
+                # 해제는 유예를 두고 (히스테리시스) — 일시적 하락에 기계가 서지 않게.
+                # 사람 미감지 가드(위)는 이 유예와 무관하게 즉시 해제된다.
                 streak_label, streak = None, 0
+                now = time.monotonic()
                 if confirmed != "인식 불가":
-                    confirmed = "인식 불가"
-                    confirmed_idx = None
-                    print("확정: 인식 불가 → 안전 기본값(정지)")
+                    if low_conf_since is None:
+                        low_conf_since = now
+                    remain = args.release_grace - (now - low_conf_since)
+                    if remain > 0:
+                        status = f"신뢰 회복 대기 {remain:.1f}s (유지: {confirmed})"
+                    else:
+                        confirmed = "인식 불가"
+                        confirmed_idx = None
+                        low_conf_since = None
+                        print("확정: 인식 불가 (유예 초과) → 안전 기본값(정지)")
 
         # 확정 상태 전송: 상태가 바뀌면 즉시, 같으면 1초 주기 하트비트
         signal = labels[confirmed_idx] if confirmed_idx is not None else "unknown"
