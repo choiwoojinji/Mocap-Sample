@@ -56,4 +56,4 @@ idle(신호없음) 수집은 터미널에서: `.venv/bin/python -m src.dataset.c
 전체 파이프라인 + ROS 2 연동 실증 완료 (2026-07-07).
 진행 중: 데이터 보강(라벨당 100개)으로 인식 정확도 개선 — [ml-flow.md 7절](doc/ml-flow.md) 체크리스트 참고.
 
-![GitHub Stats](https://github-readme-stats.vercel.app/api?username=choiwoojinji)
+[![Solved.ac Badge](http://mazassumnida.wtf/api/v2/generate_badge?boj=choiwoojinji)](https://solved.ac/choiwoojinji)
